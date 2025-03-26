@@ -421,4 +421,5 @@ function print_legend() {
     done
 }
 
+
 main "$@"
