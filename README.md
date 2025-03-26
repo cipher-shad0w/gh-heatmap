@@ -1,6 +1,3 @@
-**gh-heatmap** is a powerful Bash script to visualize Git commit activity as a calendar heatmap. Developed by [Cipher Shad0w (Jannis Krija)](https://github.com/cipher-shad0w).
-
-![Sample Output](https://via.placeholder.com/800x200.png?text=Sample+Heatmap+Output)
 
 ## ✨ Features
 
