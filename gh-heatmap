@@ -78,6 +78,7 @@ config_repo_path="."
 config_theme_name="dark"
 config_months_gap=0
 config_breakpoints_multiplier=1
+config_account_wide=false
 
 function main() {
     load_config_file "$ETC_CONFIG_FILE"
@@ -121,6 +122,7 @@ ${BOLD}OPTIONS${RESET}
     ${GREEN}-t ${UNDER}name${RESET}    ${DIM}Select a theme by ${UNDER}name${RESUND} (default: dark, available: dark, light, 8colors).${RESET}
     ${GREEN}-w ${UNDER}number${RESET}  ${DIM}Set the cell width (default: 2, options: 2 or 3).${RESET}
     ${GREEN}-y ${UNDER}number${RESET}  ${DIM}Specify the number of years to display (default: 0, which shows all years).${RESET}
+    ${GREEN}-A ${RESET}        ${DIM}Enable account-wide heatmap.${RESET}
 
     ${GREEN}-h ${RESET}        ${DIM}Show this help message and exit.${RESET}
     ${GREEN}-V ${RESET}        ${DIM}Display version information and exit.${RESET}
@@ -179,7 +181,7 @@ function parse_args() {
     local positional_args=()
 
     while [[ $OPTIND -le "$#" ]]; do
-        if getopts :a:b:m:cdeg:ls:t:w:y:hV option; then
+        if getopts :a:b:m:cdeg:ls:t:w:y:hVA option; then
             case "$option" in
                 a) config_authors+=("$OPTARG") ;;
                 b) config_breakpoints_multiplier="$OPTARG" ;;
@@ -193,6 +195,7 @@ function parse_args() {
                 t) config_theme_name="$OPTARG" ;;
                 w) config_cell_width="$OPTARG" ;;
                 y) config_years="$OPTARG" ;;
+                A) config_account_wide=true ;;
                 h) usage ;;
                 V) version ;;
                 :) die "Error: Option -$OPTARG requires an argument" ;;
@@ -421,5 +424,54 @@ function print_legend() {
     done
 }
 
+# Check if account-wide heatmap is enabled
+if [[ "$config_account_wide" == true ]]; then
+    echo "Fetching all repositories for the account..."
+    # Use GitHub API to fetch all repositories
+    repos=$(curl -s -H "Authorization: Bearer $GITHUB_TOKEN" "https://api.github.com/user/repos?per_page=100&type=all" | jq -r '.[].clone_url')
+
+    if [[ -z "$repos" ]]; then
+        echo "No repositories found or authentication failed."
+        exit 1
+    fi
+
+    # Debugging: Print all repository URLs fetched
+    echo "Repositories fetched: $repos"
+
+    # Initialize an empty array to store all commits
+    all_commits=()
+
+    # Aggregate commits from all repositories
+    for repo in $repos; do
+        echo "Cloning repository: $repo"
+        git clone --bare "$repo" temp_repo &>/dev/null || { echo "Failed to clone $repo"; continue; }
+        echo "Successfully cloned $repo"
+        cd temp_repo || { echo "Failed to enter temp_repo for $repo"; continue; }
+        echo "Fetching commits for $repo"
+        commits=$(git log --pretty=format:'%ad' --date=format:'%Y %-j') || { echo "Failed to fetch commits for $repo"; cd ..; rm -rf temp_repo; continue; }
+        echo "Commits fetched for $repo: $commits"
+        all_commits+=("$commits")
+        cd ..
+        rm -rf temp_repo
+        echo "Finished processing $repo"
+    done
+
+    # Debugging: Print all aggregated commits
+    echo "Aggregated commits: ${all_commits[@]}"
+
+    # Combine all commits and process them
+    echo "Aggregating commits from all repositories..."
+    printf "%s\n" "${all_commits[@]}" | sort -nr | uniq -c | while read -r count year day; do
+        echo "$count $year $day"
+        # Update the commits_per_day array for visualization
+        commits_per_day[$(( day - 1 ))]=$count
+    done
+
+    # Call the print_years function to display the heatmap
+    print_years
+else
+    # Existing logic for single repository
+    get_commits_per_day
+fi
 
 main "$@"
